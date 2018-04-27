@@ -7,86 +7,6 @@
             [gulfstream.core :as gs]
             [gulfstream.graph :as gg]))
 
-(def url-graphs-map
-  {:nodes [:root
-           :state
-           :city
-           [:? {:cond 'hood
-                :then :a
-                :else :b}]
-           :hood
-           :property-type]
-   :edges [[:root :state {:sep "/"}]
-           [:state :city {:sep "/"}]
-           [:city :?]
-           [:? :hood {:branch :a
-                      :sep "/"}]
-           [:? :property-type {:branch :b
-                               :sep "-"}]
-           [:hood :property-type {:sep "-"}]]})
-
-(def url-graph-cypher
-  "Cypher-inspired syntax."
-  '[(:root)->["/"]->
-    (:state)-["/"]->
-    (:city)->
-    (? :hood :a :b)
-    -[:a "/"]->(:hood)-["-"]->(:property-type)
-    -[:b "-"]->(:property-type)])
-
-(def url-graph-str
-  "
-
-
-  |root -\"/\"->
-    |state -\"/\"->
-      |city -> |? hood
-        -\"/\"-> |hood -\"-\"-> |property-type||
-        -\"-\"-> |property-type|
-      |
-    |
-  |
-
-
-  ")
-
-(defprotocol AsGraph
-  (as-graph [this] "Convert `this` to a graph"))
-
-(defn graph-from-map
-  [{:keys [nodes edges] :as m}]
-  (let [g (uber/digraph)
-        default-node-attrs (fn [x]
-                             (if (coll? x)
-                               [(first x) (or (second x) {})]
-                               [x {}]))
-        default-edge-attrs (fn [[s t a :as edge]]
-                             (if-not a [s t {}] edge))
-        g (apply uber/add-nodes-with-attrs g (map default-node-attrs nodes))
-        g (apply uber/add-directed-edges g (map default-edge-attrs edges))]
-    g))
-
-(extend-protocol AsGraph
-  clojure.lang.IPersistentMap
-  (as-graph [{:keys [nodes edges] :as m}]
-    (graph-from-map m)))
-
-(defn eval-node
-  [n g]
-  )
-
-(defn eval-graph
-  "Given a graph and a set of evaluation restrictions, evaluate the graph. In terms of a Lisp's REPL sequence, this is _after_ read."
-  [g]
-  (when-not (graph/directed? g)
-    (throw (IllegalArgumentException. "The graph must be a directed graph. It may contain cycles.")))
-  #_(loop [n (first (uber/nodes g)) ret nil]
-      (if n
-        (if-let [succ (uber/successors )])
-        (recur
-         (next ns) (eval-node n g))
-        ret)))
-
 (def class-names
   {clojure.lang.PersistentHashMap "hash-map"
    clojure.lang.PersistentHashSet "hash-set"
@@ -113,10 +33,6 @@
         (keyword (subs raw (inc idx)))
         (keyword raw)))
     (str (pr-str x) (gensym "_"))))
-
-(defn form-node
-  [form]
-  )
 
 (defn form-graph*
   ([form] (form-graph* (uber/digraph) form))
@@ -211,12 +127,10 @@
               :let [children (map-indexed (fn [idx x] [idx x])
                                           (uber/successors ug n))
                     [nx ny _] (gs-get-pos graph n)]]
-        ;; (prn "Parent:" n nx ny)
         (when (seq children)
           (doseq [[idx child] children]
             (let [x (+ idx #_(* 1.2 idx) nx)
                   y (- ny 1 #_(* 0.2 nidx))]
-              ;; (prn "Child:" child x y)
               (gs-set-pos graph child x y))))))))
 
 (def sample-ubergraph
@@ -226,7 +140,7 @@
 
 (def sample-browser
   (doto (gs/browse {:title "Code Graph"
-                    ;; :attributes {:gs.disable-auto-layout true}
+                    :attributes {:gs.disable-auto-layout true}
                     :dom (gs-dom sample-ubergraph)
                     :style [[:node {:fill-color "white"
                                     :text-size 12
@@ -238,7 +152,5 @@
                             [(keyword "node:clicked") {:stroke-color "purple"}]
                             [:edge.list {:stroke-mode "dashes"
                                          :size 0.2
-                                         :fill-color "#efefef"
-                                         ;; :stroke-color "yellow"
-                                         }]]})
+                                         :fill-color "#efefef"}]]})
     (manual-layout sample-ubergraph)))

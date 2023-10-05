@@ -1,11 +1,7 @@
 (ns grapl.core
-  (:require [clojure.pprint :refer [pp pprint]]
-            [clojure.string :as str]
-            [loom.graph :as graph]
-            [ubergraph.core :as uber]
-            [ubergraph.alg :as alg]
-            [gulfstream.core :as gs]
-            [gulfstream.graph :as gg]))
+  (:require
+   [clojure.string :as str]
+   [ubergraph.core :as uber]))
 
 (def class-names
   {clojure.lang.PersistentHashMap "hash-map"
@@ -25,14 +21,17 @@
    clojure.lang.PersistentTreeSet "#{...}"
    clojure.lang.PersistentVector "[...]"})
 
+(def counter (java.util.concurrent.atomic.AtomicLong. 0))
+
 (defn uniq [x]
   (if (coll? x)
     (let [raw (str (get class-names (class x) (.getName (class x)))
-                   (gensym "_"))]
+                   "_"
+                   (.incrementAndGet counter))]
       (if-let [idx (str/last-index-of raw ".")]
         (keyword (subs raw (inc idx)))
         (keyword raw)))
-    (str (pr-str x) (gensym "_"))))
+    (str (pr-str x) "_" (.incrementAndGet counter))))
 
 (defn form-graph*
   ([form] (form-graph* (uber/digraph) form))
@@ -83,74 +82,14 @@
   [form]
   (:graph (form-graph* (uber/digraph) form)))
 
-(defn gs-nodes
-  [ug]
-  (into {}
-        (comp (map (juxt identity (partial uber/attrs ug)))
-              (map (fn [[id attrs]] (if (:label attrs)
-                                      [id attrs]
-                                      [id (assoc attrs :label id)]))))
-        (uber/nodes ug)))
+(comment
+  (def sample-ubergraph
+    (form-graph '(+ (- 10 2) 3 4 5)))
 
-(defn gs-edges
-  [ug]
-  (let [raw-edges (uber/edges ug)
-        attrs (map (partial uber/attrs ug) raw-edges)
-        edge-pairs (map (juxt :src :dest) raw-edges)]
-    (->> (interleave edge-pairs attrs)
-         (apply hash-map))))
+  (ubergraph.core/viz-graph sample-ubergraph)
 
-(defn gs-dom
-  "Create gulfstream dom structure from an ubergraph"
-  [ug]
-  {:nodes (gs-nodes ug)
-   :edges (gs-edges ug)})
+  '(do
+     (defn identity [x] x)
+     (defn add [x y] (+ x y)))
 
-(defn gs-set-pos
-  [g n x y]
-  (.setAttribute (.getNode g (name n)) "xyz" (into-array Object [x y 0]))
-  g)
-
-(defn gs-get-pos
-  [g n]
-  (.getAttribute (.getNode g (name n)) "xyz"))
-
-(defn manual-layout
-  "Browser is a GraphStream browser, ug is an ubergraph graph."
-  [browser ug]
-  (let [[viewer graph] ((juxt :viewer :graph) browser)
-        edges (uber/edges ug)]
-    (.disableAutoLayout viewer)
-    (let [nodes (alg/topsort ug)]
-      (gs-set-pos graph (first nodes) 1 1)
-      (doseq [[nidx n] (map-indexed (fn [idx x] [idx x]) nodes)
-              :let [children (map-indexed (fn [idx x] [idx x])
-                                          (uber/successors ug n))
-                    [nx ny _] (gs-get-pos graph n)]]
-        (when (seq children)
-          (doseq [[idx child] children]
-            (let [x (+ idx #_(* 1.2 idx) nx)
-                  y (- ny 1 #_(* 0.2 nidx))]
-              (gs-set-pos graph child x y))))))))
-
-(def sample-ubergraph
-  (form-graph '(do
-                 (defn identity [x] x)
-                 (defn add [x y] (+ x y)))))
-
-(def sample-browser
-  (doto (gs/browse {:title "Code Graph"
-                    :attributes {:gs.disable-auto-layout true}
-                    :dom (gs-dom sample-ubergraph)
-                    :style [[:node {:fill-color "white"
-                                    :text-size 12
-                                    :text-color "black"
-                                    :text-alignment "at-left"
-                                    :stroke-mode "plain"
-                                    :stroke-width 2
-                                    :stroke-color "orange"}]
-                            [(keyword "node:clicked") {:stroke-color "purple"}]
-                            [:edge.list {:stroke-mode "dashes"
-                                         :size 0.2
-                                         :fill-color "#efefef"}]]})
-    (manual-layout sample-ubergraph)))
+  )
